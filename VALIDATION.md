@@ -9,6 +9,7 @@
 - 新增缺失视频的逐目录诊断后，`python -m pytest -q tests/test_quick_evaluation.py`：**5 passed**；覆盖空目录、嵌套目录及不支持的扩展名。
 - 修复全数质量不足时的准确率展示后，`python -m pytest -q tests/test_quick_evaluation.py`：**6 passed**；全数 `inconclusive` 的终端只显示 `not_measurable`、覆盖率和逐段失败原因，保留操作策略计数但不作为检测成绩展示。
 - 为探索运动门槛添加 `--max-motion` 后，`python -m pytest -q tests/test_quick_evaluation.py`：**11 passed**；验证三个类别实际收到相同门槛、报告记录配置并拒绝无效参数。此参数调节属于探索，必须另用未参与调参的视频评估准确率。
+- 增加真人误拒扣分分解后，`python -m pytest -q tests/test_signal.py tests/test_quick_evaluation.py`：**37 passed**；验证扣分总和等于 `1-score`、结果按扣分贡献排序，且每处区域的两种算法和前后半段估计被记录。
 - `python -m compileall -q rppg_liveness`：通过。
 - `python -m rppg_liveness --help`：三个子命令正常显示。
 

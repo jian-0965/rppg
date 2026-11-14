@@ -80,11 +80,19 @@ def analyze(times, colors, boxes, config=Config()):
                                      for a, z in halves]) / 12))
     features = dict(spectral_concentration=peak, roi_bpm_agreement=agreement,
                     roi_correlation=correlation, method_agreement=method, temporal_stability=stability)
+    weights = {"roi_bpm_agreement": 0.30, "roi_correlation": 0.25,
+               "method_agreement": 0.25, "temporal_stability": 0.20}
+    # Mathematical penalties, not inferred physiological or attack causes.
+    penalties = {"spectral_concentration": float(1 - peak)}
+    penalties.update({key: float(peak * weight * (1 - features[key]))
+                      for key, weight in weights.items()})
     # Multiplicative gate avoids awarding high scores for mutually consistent noise.
     score = peak * (0.30 * agreement + 0.25 * correlation + 0.25 * method + 0.20 * stability)
     return {"status": "ok", "reason": None, "score": float(np.clip(score, 0, 1)),
             "bpm": float(np.median(bpms)), "quality": quality, "features": features,
-            "roi_bpm": bpms, "roi_snr_db": [s["snr_db"] for s in specs]}
+            "score_penalties": penalties, "roi_bpm": bpms,
+            "chrom_roi_bpm": [s["bpm"] for s in alt], "roi_half_bpm": halves,
+            "roi_snr_db": [s["snr_db"] for s in specs]}
 
 
 def decide(result, threshold=0.55):

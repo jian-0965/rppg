@@ -61,7 +61,8 @@ def main(argv=None):
             print(json.dumps({"n": report["all"]["n"], "coverage": report["all"]["coverage"],
                               "inconclusive": report["all"]["inconclusive"],
                               "detection": report["detection"],
-                              "quality_failures": report["quality_failures"]},
+                              "quality_failures": report["quality_failures"],
+                              "sample_diagnostics": report["sample_diagnostics"]},
                              ensure_ascii=False, indent=2, allow_nan=False))
             print(f"Report: {args.output / 'report.json'}")
             return 0

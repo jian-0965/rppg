@@ -28,6 +28,7 @@ def test_exploratory_trial_counts_live_false_reject_and_replay_false_accept(tmp_
     assert report["all"]["accuracy_fail_closed"] == pytest.approx(1 / 3)
     assert report["by_attack_type"]["replay"]["APCER_fail_closed"] == 1.0
     assert report["detection"]["status"] == "measurable_on_scorable_subset"
+    assert report["sample_diagnostics"][0]["decision"] == "attack_candidate"
     assert len(json.loads((out / "predictions.json").read_text())) == 3
     assert (out / "predictions.csv").exists() and (out / "evaluation.png").stat().st_size > 100
 
@@ -90,6 +91,17 @@ def test_custom_motion_cutoff_applies_and_is_recorded(tmp_path, monkeypatch):
     report = evaluation.quick_evaluate(root, tmp_path / "out", max_motion=0.03)
     assert seen == [0.03] * 3
     assert report["config"]["max_motion"] == 0.03
+
+
+def test_diagnostic_lists_largest_penalty_first():
+    row = {"path": "live.avi", "label": "live", "status": "ok", "score": 0.22,
+           "reason": None, "features": {"method_agreement": 0.04},
+           "score_penalties": {"method_agreement": 0.25, "temporal_stability": 0.19,
+                               "spectral_concentration": 0.34}}
+    finding = evaluation.sample_diagnostic(row, 0.55)
+    assert finding["decision"] == "attack_candidate"
+    assert [x["feature"] for x in finding["largest_score_penalties"]] == [
+        "spectral_concentration", "method_agreement", "temporal_stability"]
 
 
 @pytest.mark.parametrize("motion", [float("nan"), -1, 0, 0.25])

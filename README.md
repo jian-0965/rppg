@@ -96,6 +96,8 @@ python -m rppg_liveness quick-evaluate data --max-motion 0.03 --output outputs/q
 
 ### 更严格的开发／测试集实验
 
+真人被误拒时，查看 `report.json` 的 `sample_diagnostics`：逐段包含判定、得分、三处 POS／CHROM 估计 BPM、前后半段估计 BPM，以及扣分最大的因素。扣分贡献只是评分公式的算术分解，应结合实际视频分析原因。
+
 ### 采样方案
 
 先做小规模探索实验，再扩大到多人、多设备、多场景。可从 20 位同意参与的人员开始，每人每种条件至少采集 3 次，分不同会话录制；这只是探索规模，不能支撑部署级的低误通过率结论。
@@ -214,6 +216,7 @@ python -m rppg_liveness camera --seconds 30 --output outputs/camera.json
 性能修复将所有滑动窗口批量滤波并缓存滤波器系数，保持原有评分、阈值和 5 秒过期规则。若仍超时，结果保持 `inconclusive`，同时保留 `quality`、分析耗时和 `diagnostics` 中的过期特征供排查；过期分数不能用于放行。
 
 ## 5. 参考资料
+
 
 - Wang et al., *Algorithmic Principles of Remote PPG*, IEEE TBME, 2017：[作者机构页面](https://research.tue.nl/en/publications/algorithmic-principles-of-remote-ppg/)。
 - de Haan & Jeanne, *Robust Pulse Rate From Chrominance-Based rPPG*, IEEE TBME, 2013：[作者机构页面](https://research.tue.nl/en/publications/robust-pulse-rate-from-chrominance-based-rppg/)。

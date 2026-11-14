@@ -33,6 +33,13 @@ def test_coherent_pulse_and_replay_limitation():
     assert analyze(*(a.copy() for a in args))["score"] == result["score"]
 
 
+def test_score_diagnostics_account_for_final_score():
+    result = analyze(*trace())
+    assert sum(result["score_penalties"].values()) == pytest.approx(1 - result["score"])
+    assert len(result["chrom_roi_bpm"]) == 3
+    assert len(result["roi_half_bpm"]) == 3
+
+
 def test_flat_signal_never_accepted():
     t, c, b = trace()
     c[:] = [160, 110, 80]

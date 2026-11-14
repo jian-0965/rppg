@@ -9,6 +9,21 @@ from .core import Config, config_dict
 from .video import analyze_video
 
 
+def sample_diagnostic(row, threshold):
+    """Expose score arithmetic for each sample without claiming root cause."""
+    penalties = row.get("score_penalties", {})
+    return {"path": row["path"], "label": row["label"],
+            "decision": ("inconclusive" if row["status"] != "ok" else
+                         "live_candidate" if row["score"] >= threshold else "attack_candidate"),
+            "score": row["score"], "threshold": threshold,
+            "features": row.get("features", {}),
+            "largest_score_penalties": [{"feature": key, "value": value}
+                                        for key, value in sorted(penalties.items(), key=lambda item: -item[1])[:3]],
+            "roi_bpm": row.get("roi_bpm"), "chrom_roi_bpm": row.get("chrom_roi_bpm"),
+            "roi_half_bpm": row.get("roi_half_bpm"),
+            "quality_reason": row.get("reason")}
+
+
 def sha256(path):
     digest = hashlib.sha256()
     with open(path, "rb") as stream:
@@ -199,10 +214,11 @@ def quick_evaluate(data_dir, output, threshold=0.55, max_motion=Config().max_mot
               "config": {"max_motion": config.max_motion},
               "warning": "Measured only on these submitted videos. Default threshold is unvalidated; repeated subjects are correlated. Replay may preserve pulse.",
               "counts": counts, "detection": detection, "quality_failures": failures,
+              "sample_diagnostics": [sample_diagnostic(r, threshold) for r in rows],
               "all": metrics(rows, threshold),
               "by_attack_type": {kind: metrics([r for r in rows if r["attack_type"] in {"none", kind}], threshold)
                                  for kind in ("print", "replay")},
-              "note": "all.*_fail_closed describes operational reject policy; its accuracy can look high even with zero scorable samples. Use detection metrics only with both classes scorable, alongside coverage. This is not a population accuracy estimate."}
+              "note": "largest_score_penalties are arithmetic contributions, not proven causes. all.*_fail_closed describes operational reject policy; its accuracy can look high even with zero scorable samples. Use detection metrics only with both classes scorable, alongside coverage. This is not a population accuracy estimate."}
     write_json(output / "report.json", report)
     fields = ["path", "label", "attack_type", "status", "reason", "score", "bpm", "sha256"]
     with (output / "predictions.csv").open("w", encoding="utf-8-sig", newline="") as stream:
