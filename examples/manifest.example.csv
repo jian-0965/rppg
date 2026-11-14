@@ -1,0 +1,7 @@
+path,label,subject_id,source_id,split,attack_type
+../data/dev/person01_live.mp4,live,person01,session01_live,dev,none
+../data/dev/person02_print.mp4,attack,person02,session02_print,dev,print
+../data/dev/person03_replay.mp4,attack,person03,session03_original,dev,replay
+../data/test/person04_live.mp4,live,person04,session04_live,test,none
+../data/test/person05_print.mp4,attack,person05,session05_print,test,print
+../data/test/person06_replay.mp4,attack,person06,session06_original,test,replay
