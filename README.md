@@ -68,6 +68,26 @@ python -m rppg_liveness video data/new.mp4 --calibration outputs/evaluation/cali
 
 ## 2. 怎样测真实准确性
 
+### 先做可直接运行的小实验
+
+当前摄像头画面只输出**一个样本的得分**。要测“准确率”，必须同时拍到**已知是真人的视频**以及**已知是攻击的视频**，并统计每类误判。下面是不用手写 CSV、使用固定默认阈值的快速实验。Windows CMD：
+
+```bat
+mkdir data\live data\print data\replay
+```
+
+用**同一个测试摄像头**分别录制约 20 秒的视频，复制到对应文件夹。`live` 放本人面对摄像头的视频；`print` 放摄像头拍摄纸质人脸照片的视频；`replay` 放摄像头**重新拍摄手机／屏幕播放真人脸录像**的视频。原始真人录像不能直接放进 `replay` 文件夹，必须让摄像头看到真实播放屏幕。测试时保持相近距离、背景和灯光，每类先录至少 3–5 段独立视频，避免从同一个录像切片凑数；文件名任选，支持 MP4／AVI／MOV／MKV。
+
+```bat
+python -m rppg_liveness quick-evaluate data --output outputs/quick-evaluation
+```
+
+看 `outputs/quick-evaluation/report.json` 的 `all.accuracy_fail_closed`、`all.APCER_fail_closed`（攻击误通过）、`all.BPCER_fail_closed`（真人误拒）、`all.coverage`，以及 `by_attack_type.replay` 的攻击误通过率；`predictions.csv` 列出每段视频的结果，`evaluation.png` 显示混淆矩阵。画面质量不足的真人也算未通过；只用照片样本、只用真人样本、完全重复的视频都会被拒绝。
+
+**这个快速实验只描述你提供的这些样本；默认 0.55 阈值仍未经校准。** 同一个人多次录制的结果相关，少量样本的百分比不等于所有人的准确率。不要根据快速实验的结果反复调整阈值再报告同一批视频的准确率。需要对其他人的效果作可信报告时，继续使用下面的人员互不重叠开发／测试集流程。
+
+### 更严格的开发／测试集实验
+
 ### 采样方案
 
 先做小规模探索实验，再扩大到多人、多设备、多场景。可从 20 位同意参与的人员开始，每人每种条件至少采集 3 次，分不同会话录制；这只是探索规模，不能支撑部署级的低误通过率结论。

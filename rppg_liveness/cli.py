@@ -5,7 +5,7 @@ import sys
 import cv2
 import numpy as np
 from .core import Config, config_dict, decide
-from .evaluation import evaluate, write_json
+from .evaluation import evaluate, quick_evaluate, write_json
 from .video import analyze_video, camera
 
 
@@ -41,11 +41,22 @@ def main(argv=None):
     p = sub.add_parser("evaluate", help="Calibrate on dev then report held-out test metrics")
     p.add_argument("manifest", type=Path)
     p.add_argument("--output", type=Path, default=Path("outputs/evaluation"))
+    p = sub.add_parser("quick-evaluate", help="Fixed-threshold exploratory accuracy from live/print/replay video folders")
+    p.add_argument("data_dir", type=Path)
+    p.add_argument("--output", type=Path, default=Path("outputs/quick-evaluation"))
+    p.add_argument("--threshold", type=float, default=0.55)
     args = parser.parse_args(argv)
     try:
         if args.command == "evaluate":
             report = evaluate(args.manifest, args.output)
             print(json.dumps(report["test"], ensure_ascii=False, indent=2, allow_nan=False))
+            print(f"Report: {args.output / 'report.json'}")
+            return 0
+        if args.command == "quick-evaluate":
+            if not np.isfinite(args.threshold) or not 0 <= args.threshold <= 1:
+                raise ValueError("--threshold must be finite and between 0 and 1")
+            report = quick_evaluate(args.data_dir, args.output, args.threshold)
+            print(json.dumps(report["all"], ensure_ascii=False, indent=2, allow_nan=False))
             print(f"Report: {args.output / 'report.json'}")
             return 0
         threshold = resolve_threshold(args)

@@ -140,7 +140,55 @@ def evaluate(manifest, output):
     return report
 
 
-def plot_report(rows, threshold, path):
+def quick_evaluate(data_dir, output, threshold=0.55):
+    """A fixed-threshold exploratory trial, with no calibration or population claim.
+
+    data_dir/live, data_dir/print and data_dir/replay contain independently
+    recorded camera presentations. Each file counts exactly once.
+    """
+    root = Path(data_dir).resolve()
+    output = Path(output).resolve()
+    types = {"live": ("live", "none"), "print": ("attack", "print"),
+             "replay": ("attack", "replay")}
+    extensions = {".avi", ".mp4", ".mov", ".mkv"}
+    rows = []
+    for folder, (label, attack_type) in types.items():
+        location = root / folder
+        if not location.is_dir():
+            raise ValueError(f"Missing folder: {location}")
+        for path in sorted(location.iterdir()):
+            if path.is_file() and path.suffix.lower() in extensions:
+                rows.append({"path": str(path), "label": label, "attack_type": attack_type})
+    counts = {folder: sum(row["attack_type"] == kind for row in rows)
+              for folder, (_, kind) in types.items()}
+    if any(counts[k] < 1 for k in types):
+        raise ValueError("Provide at least one video in each of live/, print/ and replay/")
+    hashes = [sha256(row["path"]) for row in rows]
+    if len(hashes) != len(set(hashes)):
+        raise ValueError("Duplicate video contents across trial folders")
+    for index, row in enumerate(rows, 1):
+        print(f"[{index}/{len(rows)}] {row['attack_type']} {Path(row['path']).name}", flush=True)
+        row.update(analyze_video(row["path"]))
+        row["sha256"] = hashes[index-1]
+    output.mkdir(parents=True, exist_ok=True)
+    write_json(output / "predictions.json", rows)
+    report = {"kind": "exploratory_fixed_threshold", "threshold": threshold,
+              "warning": "Measured only on these submitted videos. Default threshold is unvalidated; repeated subjects are correlated. Replay may preserve pulse.",
+              "counts": counts, "all": metrics(rows, threshold),
+              "by_attack_type": {kind: metrics([r for r in rows if r["attack_type"] in {"none", kind}], threshold)
+                                 for kind in ("print", "replay")},
+              "note": "Inconclusive is never accepted; AUC only uses scorable videos. This is not a population accuracy estimate. Use subject-disjoint evaluate for held-out claims."}
+    write_json(output / "report.json", report)
+    fields = ["path", "label", "attack_type", "status", "reason", "score", "bpm", "sha256"]
+    with (output / "predictions.csv").open("w", encoding="utf-8-sig", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+    plot_report(rows, threshold, output / "evaluation.png", title="Trial confusion (fail-closed)")
+    return report
+
+
+def plot_report(rows, threshold, path, title="Test confusion (fail-closed)"):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -152,7 +200,7 @@ def plot_report(rows, threshold, path):
         for j in range(2):
             axes[0].text(j, i, str(matrix[i, j]), ha="center", va="center")
     axes[0].set(xticks=[0, 1], yticks=[0, 1], xticklabels=['Reject', 'Accept'],
-                yticklabels=['Attack', 'Live'], title='Test confusion (fail-closed)', xlabel='Decision', ylabel='Truth')
+                yticklabels=['Attack', 'Live'], title=title, xlabel='Decision', ylabel='Truth')
     valid = [r for r in rows if r["status"] == "ok"]
     if {r["label"] for r in valid} == {"live", "attack"}:
         fpr, tpr, _ = roc_curve([r["label"] == "live" for r in valid], [r["score"] for r in valid])
