@@ -45,6 +45,8 @@ def main(argv=None):
     p.add_argument("data_dir", type=Path)
     p.add_argument("--output", type=Path, default=Path("outputs/quick-evaluation"))
     p.add_argument("--threshold", type=float, default=0.55)
+    p.add_argument("--max-motion", type=float, default=Config().max_motion,
+                   help="Experimental motion quality cutoff (default: 0.025)")
     args = parser.parse_args(argv)
     try:
         if args.command == "evaluate":
@@ -55,7 +57,7 @@ def main(argv=None):
         if args.command == "quick-evaluate":
             if not np.isfinite(args.threshold) or not 0 <= args.threshold <= 1:
                 raise ValueError("--threshold must be finite and between 0 and 1")
-            report = quick_evaluate(args.data_dir, args.output, args.threshold)
+            report = quick_evaluate(args.data_dir, args.output, args.threshold, args.max_motion)
             print(json.dumps({"n": report["all"]["n"], "coverage": report["all"]["coverage"],
                               "inconclusive": report["all"]["inconclusive"],
                               "detection": report["detection"],

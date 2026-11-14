@@ -16,7 +16,7 @@ def folders(tmp_path):
 def test_exploratory_trial_counts_live_false_reject_and_replay_false_accept(tmp_path, monkeypatch):
     root = folders(tmp_path / "data")
     scores = {"live": 0.22, "print": None, "replay": 0.8}
-    def fake(path):
+    def fake(path, config=None):
         score = scores[Path(path).parent.name]
         return dict(status="ok" if score is not None else "insufficient_quality",
                     reason=None if score is not None else "face_missing_or_multiple", score=score, bpm=None)
@@ -65,7 +65,7 @@ def test_quick_cli_invalid_threshold(tmp_path):
 
 def test_all_inconclusive_never_reports_detection_accuracy(tmp_path, monkeypatch, capsys):
     root = folders(tmp_path / "data")
-    monkeypatch.setattr(evaluation, "analyze_video", lambda path: {
+    monkeypatch.setattr(evaluation, "analyze_video", lambda path, config=None: {
         "status": "insufficient_quality", "reason": "too_short", "score": None,
         "bpm": None, "quality": {"duration": 3.0}})
     output = tmp_path / "out"
@@ -77,3 +77,21 @@ def test_all_inconclusive_never_reports_detection_accuracy(tmp_path, monkeypatch
     assert [r["reason"] for r in report["quality_failures"]] == ["too_short"] * 3
     output_text = capsys.readouterr().out
     assert '"not_measurable"' in output_text and '"accuracy_fail_closed"' not in output_text
+
+
+def test_custom_motion_cutoff_applies_and_is_recorded(tmp_path, monkeypatch):
+    root = folders(tmp_path / "data")
+    seen = []
+    def fake(path, config=None):
+        seen.append(config.max_motion)
+        return {"status": "ok", "reason": None,
+                "score": 0.2 if Path(path).parent.name == "live" else 0.1, "bpm": 70}
+    monkeypatch.setattr(evaluation, "analyze_video", fake)
+    report = evaluation.quick_evaluate(root, tmp_path / "out", max_motion=0.03)
+    assert seen == [0.03] * 3
+    assert report["config"]["max_motion"] == 0.03
+
+
+@pytest.mark.parametrize("motion", [float("nan"), -1, 0, 0.25])
+def test_invalid_motion_cutoff_rejected(tmp_path, motion):
+    assert main(["quick-evaluate", str(tmp_path), "--max-motion", str(motion)]) == 2

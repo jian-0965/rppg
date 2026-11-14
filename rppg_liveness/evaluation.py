@@ -140,7 +140,7 @@ def evaluate(manifest, output):
     return report
 
 
-def quick_evaluate(data_dir, output, threshold=0.55):
+def quick_evaluate(data_dir, output, threshold=0.55, max_motion=Config().max_motion):
     """A fixed-threshold exploratory trial, with no calibration or population claim.
 
     data_dir/live, data_dir/print and data_dir/replay contain independently
@@ -148,6 +148,9 @@ def quick_evaluate(data_dir, output, threshold=0.55):
     """
     root = Path(data_dir).resolve()
     output = Path(output).resolve()
+    if not np.isfinite(max_motion) or not 0 < max_motion <= 0.2:
+        raise ValueError("max_motion must be finite and in (0, 0.2]")
+    config = Config(max_motion=float(max_motion))
     types = {"live": ("live", "none"), "print": ("attack", "print"),
              "replay": ("attack", "replay")}
     extensions = {".avi", ".mp4", ".mov", ".mkv"}
@@ -179,7 +182,7 @@ def quick_evaluate(data_dir, output, threshold=0.55):
         raise ValueError("Duplicate video contents across trial folders")
     for index, row in enumerate(rows, 1):
         print(f"[{index}/{len(rows)}] {row['attack_type']} {Path(row['path']).name}", flush=True)
-        row.update(analyze_video(row["path"]))
+        row.update(analyze_video(row["path"], config=config))
         row["sha256"] = hashes[index-1]
     output.mkdir(parents=True, exist_ok=True)
     write_json(output / "predictions.json", rows)
@@ -193,6 +196,7 @@ def quick_evaluate(data_dir, output, threshold=0.55):
     failures = [{"path": r["path"], "label": r["label"], "reason": r["reason"],
                  "quality": r.get("quality", {})} for r in rows if r["status"] != "ok"]
     report = {"kind": "exploratory_fixed_threshold", "threshold": threshold,
+              "config": {"max_motion": config.max_motion},
               "warning": "Measured only on these submitted videos. Default threshold is unvalidated; repeated subjects are correlated. Replay may preserve pulse.",
               "counts": counts, "detection": detection, "quality_failures": failures,
               "all": metrics(rows, threshold),
