@@ -70,35 +70,62 @@ def analyze_video(path, config=Config()):
     if not capture.isOpened():
         return rejected("video_open_failed")
     times, colors, boxes = [], [], []
-    timestamp_fallback = False
     try:
         fps = capture.get(cv2.CAP_PROP_FPS)
         if not np.isfinite(fps) or not 1 <= fps <= 240:
             return rejected("invalid_video_fps")
+        frame_count = capture.get(cv2.CAP_PROP_FRAME_COUNT)
+        metadata_duration = (float(frame_count / fps) if np.isfinite(frame_count) and frame_count > 0 else None)
         sampler = FaceSampler()
-        origin, previous_raw = None, None
-        for index in range(int(config.window_seconds * fps) + 1):
+        raw_times = []
+        # Read past the nominal first window when timestamps are sparse or VFR.
+        # Sampling is cheap (three color means), and the selected window remains
+        # the first 15 seconds after timestamp validation below.
+        max_frames = int(max(config.window_seconds * fps * 4, 300))
+        for index in range(max_frames):
             ok, frame = capture.read()
             if not ok:
                 break
             raw = capture.get(cv2.CAP_PROP_POS_MSEC) / 1000
-            if origin is None:
-                origin = raw if np.isfinite(raw) else 0.0
-            if not np.isfinite(raw) or (previous_raw is not None and raw <= previous_raw):
-                timestamp_fallback = True
-            previous_raw = raw
-            timestamp = index / fps if timestamp_fallback else raw - origin
+            raw_times.append(raw)
             color, box, _ = sampler.sample(frame)
-            times.append(timestamp)
             colors.append(color)
             boxes.append(box)
-            if not timestamp_fallback and timestamp >= config.window_seconds:
-                break
-        if timestamp_fallback:
-            times = np.arange(len(times)) / fps
+            if index > 5 and raw - raw_times[0] >= config.window_seconds:
+                # A duplicate timestamp must not make us discard the rest of a
+                # genuine 22-second clip on a 30/60 FPS metadata mismatch.
+                observed_so_far = np.asarray(raw_times)
+                if np.isfinite(observed_so_far).all() and np.all(np.diff(observed_so_far) >= 0) \
+                        and (np.diff(observed_so_far) > 0).mean() >= 0.95:
+                    break
+        observed = np.asarray(raw_times, dtype=float)
+        mode = "video_timestamps"
+        if len(observed) >= 2 and np.isfinite(observed).all() and \
+                np.all(np.diff(observed) >= 0) and \
+                (np.diff(observed) > 0).mean() >= 0.95 and observed[-1] > observed[0]:
+            # A few duplicate timestamps may be interpolated; one duplicate
+            # must not trigger a permanent frame-number fallback.
+            increasing = np.r_[True, np.diff(observed) > 0]
+            times = np.interp(np.arange(len(observed)), np.flatnonzero(increasing), observed[increasing])
+            times -= times[0]
+            if not increasing.all():
+                mode = "video_timestamps_interpolated"
+        else:
+            mode = "fps_fallback_assumes_CFR"
+            times = np.arange(len(observed)) / fps
+        if len(times):
+            keep = np.searchsorted(times, config.window_seconds, side="right")
+            times, colors, boxes = times[:keep], colors[:keep], boxes[:keep]
         result = analyze(times, colors, boxes, config)
-        result["timestamp_mode"] = "fps_fallback_assumes_CFR" if timestamp_fallback else "video_timestamps"
+        if mode == "fps_fallback_assumes_CFR" and result["reason"] == "too_short":
+            result = rejected("unreliable_video_timestamps", **result["quality"])
+        result["timestamp_mode"] = mode
         result["frames_read"] = len(times)
+        result["total_frames_decoded"] = len(observed)
+        result["nominal_fps"] = float(fps)
+        result["metadata_frame_count"] = float(frame_count) if np.isfinite(frame_count) else None
+        result["metadata_duration_seconds"] = metadata_duration
+        result["last_raw_timestamp_seconds"] = float(observed[-1]) if len(observed) and np.isfinite(observed[-1]) else None
         return result
     finally:
         capture.release()

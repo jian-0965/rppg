@@ -114,3 +114,83 @@ def test_timed_analysis_reports_runtime(monkeypatch):
     ticks = iter([1., 1.125])
     monkeypatch.setattr(video.time, "perf_counter", lambda: next(ticks))
     assert video._timed_analysis(([], [], []), None)["analysis_seconds"] == 0.125
+
+
+def test_video_uses_source_timestamps_after_nominal_frame_budget(monkeypatch):
+    from rppg_liveness import video
+
+    class Capture:
+        frames = 0
+        def isOpened(self):
+            return True
+        def get(self, prop):
+            if prop == cv2.CAP_PROP_FPS:
+                return 60.0  # Metadata says 60 FPS; actual frames are 30 FPS.
+            if prop == cv2.CAP_PROP_FRAME_COUNT:
+                return 660.0
+            if prop == cv2.CAP_PROP_POS_MSEC:
+                return (self.frames - 1) * 1000 / 30
+            raise AssertionError(prop)
+        def read(self):
+            if self.frames == 660:
+                return False, None
+            self.frames += 1
+            return True, None
+        def release(self):
+            pass
+
+    class Sampler:
+        def sample(self, frame):
+            return np.ones((3, 3)), np.ones(4), []
+
+    capture = Capture()
+    monkeypatch.setattr(video.cv2, "VideoCapture", lambda path: capture)
+    monkeypatch.setattr(video, "FaceSampler", Sampler)
+    def analyze_trace(times, colors, boxes, config):
+        assert 15 <= times[-1] <= 15.04
+        assert len(times) >= 450
+        return {"status": "ok", "reason": None, "score": 0.2}
+    monkeypatch.setattr(video, "analyze", analyze_trace)
+    result = video.analyze_video("any.mp4")
+    assert result["timestamp_mode"] == "video_timestamps"
+    assert result["frames_read"] >= 450
+    assert result["total_frames_decoded"] >= 450
+    assert result["metadata_duration_seconds"] == 11.0
+
+
+def test_bad_video_timestamps_do_not_masquerade_as_short_clip(monkeypatch):
+    from rppg_liveness import video
+
+    class Capture:
+        frames = 0
+        def isOpened(self):
+            return True
+        def get(self, prop):
+            if prop == cv2.CAP_PROP_FPS:
+                return 30.0
+            if prop == cv2.CAP_PROP_FRAME_COUNT:
+                return 294.0
+            if prop == cv2.CAP_PROP_POS_MSEC:
+                return 0.0  # Some backends do not expose PTS for MP4.
+            raise AssertionError(prop)
+        def read(self):
+            if self.frames == 294:
+                return False, None
+            self.frames += 1
+            return True, None
+        def release(self):
+            pass
+
+    class Sampler:
+        def sample(self, frame):
+            return np.ones((3, 3)), np.ones(4), []
+
+    capture = Capture()
+    monkeypatch.setattr(video.cv2, "VideoCapture", lambda path: capture)
+    monkeypatch.setattr(video, "FaceSampler", Sampler)
+    result = video.analyze_video("any.mp4")
+    assert result["reason"] == "unreliable_video_timestamps"
+    assert result["quality"]["duration"] < 10
+    assert result["timestamp_mode"] == "fps_fallback_assumes_CFR"
+    assert result["frames_read"] == 294
+    assert result["metadata_duration_seconds"] == 9.8

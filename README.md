@@ -90,6 +90,8 @@ python -m rppg_liveness quick-evaluate data --max-motion 0.03 --output outputs/q
 
 首先看 `outputs/quick-evaluation/report.json` 的 `detection.status`、`all.coverage` 和 `quality_failures`。如果两类都至少有一段**可评分**的视频，`detection` 会显示可评分子集的准确率和误判率；`all.*_fail_closed` 是“无法判断时一律不放行”的操作策略结果，**覆盖率为 0 时不能当作活体检测准确率**。`by_attack_type.replay` 是同一操作策略下的回放误通过率；`predictions.csv` 列出每段视频的失败原因，`evaluation.png` 显示操作策略混淆矩阵。画面质量不足的真人也算未通过；只用照片样本、只用真人样本、完全重复的视频都会被拒绝。
 
+若播放器显示 20 多秒，但程序报告 `too_short`，先更新代码并重跑：旧版遇到重复的 MP4 时间戳就会回退到“帧数 ÷ 标称 FPS”，可能把时长算短。新版优先使用有效的视频时间戳，读取首个 15 秒窗口，不会仅凭标称 FPS 提前结束。`quality_failures` 中的 `timestamp_mode`、`frames_read`、`total_frames_decoded`、`nominal_fps`、`metadata_frame_count`、`metadata_duration_seconds`、`last_raw_timestamp_seconds` 可用于排查。如果显示 `unreliable_video_timestamps`，表示解码器无法提供可信时间戳，而估计时长不足以评分；这**不是**已证实视频不足 10 秒，也不能拿手工改时长的结果算准确率。请保留原文件，核对播放器或 `ffprobe` 的实际时长、帧率和帧数；可另做一份固定 30 FPS 的转码副本用于对照，并记录转码步骤。
+
 如报 `Provide at least one video`，程序会列出每个目录识别到的视频数量及实际看见的文件名。文件需要**直接**放在 `data\live`、`data\print`、`data\replay` 下；放在它们的下一层子文件夹或使用 `.wmv` 等不支持的扩展名不会被识别。Windows CMD 可用 `dir /b data\live`、`dir /b data\print`、`dir /b data\replay` 检查。
 
 **这个快速实验只描述你提供的这些样本；默认 0.55 阈值仍未经校准。** 同一个人多次录制的结果相关，少量样本的百分比不等于所有人的准确率。不要根据快速实验的结果反复调整阈值再报告同一批视频的准确率。需要对其他人的效果作可信报告时，继续使用下面的人员互不重叠开发／测试集流程。

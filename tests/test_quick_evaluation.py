@@ -93,6 +93,21 @@ def test_custom_motion_cutoff_applies_and_is_recorded(tmp_path, monkeypatch):
     assert report["config"]["max_motion"] == 0.03
 
 
+def test_quality_failure_includes_video_timing_diagnostics(tmp_path, monkeypatch):
+    root = folders(tmp_path / "data")
+    def fake(path, config=None):
+        return {"status": "insufficient_quality", "reason": "unreliable_video_timestamps",
+                "score": None, "bpm": None, "quality": {"duration": 9.7448},
+                "timestamp_mode": "fps_fallback_assumes_CFR", "frames_read": 294,
+                "metadata_frame_count": 294.0, "nominal_fps": 30.0}
+    monkeypatch.setattr(evaluation, "analyze_video", fake)
+    report = evaluation.quick_evaluate(root, tmp_path / "out")
+    failure = report["quality_failures"][0]
+    assert failure["frames_read"] == 294
+    assert failure["timestamp_mode"] == "fps_fallback_assumes_CFR"
+    assert failure["nominal_fps"] == 30
+
+
 def test_diagnostic_lists_largest_penalty_first():
     row = {"path": "live.avi", "label": "live", "status": "ok", "score": 0.22,
            "reason": None, "features": {"method_agreement": 0.04},

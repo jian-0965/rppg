@@ -208,8 +208,13 @@ def quick_evaluate(data_dir, output, threshold=0.55, max_motion=Config().max_mot
                  {"status": "not_measurable", "accuracy": None, "APCER": None,
                   "BPCER": None, "AUC": None,
                   "reason": "Need at least one scorable live AND attack video"})
+    video_metadata = ("timestamp_mode", "frames_read", "total_frames_decoded",
+                      "nominal_fps", "metadata_frame_count", "metadata_duration_seconds",
+                      "last_raw_timestamp_seconds")
     failures = [{"path": r["path"], "label": r["label"], "reason": r["reason"],
-                 "quality": r.get("quality", {})} for r in rows if r["status"] != "ok"]
+                 "quality": r.get("quality", {}),
+                 **{key: r[key] for key in video_metadata if key in r}}
+                for r in rows if r["status"] != "ok"]
     report = {"kind": "exploratory_fixed_threshold", "threshold": threshold,
               "config": {"max_motion": config.max_motion},
               "warning": "Measured only on these submitted videos. Default threshold is unvalidated; repeated subjects are correlated. Replay may preserve pulse.",
