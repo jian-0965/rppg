@@ -1,5 +1,6 @@
 """Local capture, face detection and three fixed proportional facial ROIs."""
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 import time
 import cv2
 import numpy as np
@@ -95,6 +96,8 @@ def camera(index=0, threshold=0.55, seconds=0, display=True, config=Config()):
     capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     capture.set(cv2.CAP_PROP_FPS, 30)
     sampler, samples = FaceSampler(), deque()
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="rppg-analysis")
+    pending, generation, result_time = None, 0, None
     start, last_analysis = time.monotonic(), -1e9
     result = rejected("collecting_frames")
     try:
@@ -107,11 +110,25 @@ def camera(index=0, threshold=0.55, seconds=0, display=True, config=Config()):
             color, box, regions = sampler.sample(frame)
             samples.append((now, color, box))
             if not np.isfinite(color).all():
+                generation += 1
                 result = rejected("face_missing_or_multiple")
             while samples and now - samples[0][0] > config.window_seconds:
                 samples.popleft()
-            if now - last_analysis >= 2 and np.isfinite(color).all():
-                result = analyze(*zip(*samples), config=config)
+            if pending is not None and pending[0].done():
+                future, submitted_at, submitted_generation = pending
+                computed = future.result()
+                if submitted_generation == generation:
+                    result = computed if now - submitted_at <= 5 else rejected("analysis_too_slow")
+                    result_time = submitted_at
+                pending = None
+            if result_time is not None and result["status"] == "ok":
+                if now - result_time > 5:
+                    result = rejected("analysis_too_slow")
+                else:
+                    result["analysis_age_seconds"] = now - result_time
+            if pending is None and now - last_analysis >= 2 and np.isfinite(color).all():
+                snapshot = tuple(zip(*samples))
+                pending = (executor.submit(analyze, *snapshot, config=config), now, generation)
                 last_analysis = now
                 if not display:
                     print(f"{now:.1f}s {decide(result, threshold)} score={result['score']} reason={result['reason']}")
@@ -130,6 +147,7 @@ def camera(index=0, threshold=0.55, seconds=0, display=True, config=Config()):
                 break
     finally:
         capture.release()
+        executor.shutdown(wait=True, cancel_futures=True)
         if display:
             cv2.destroyAllWindows()
     return result

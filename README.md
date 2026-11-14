@@ -31,7 +31,7 @@ python -m rppg_liveness camera
 
 下面命令均假设已激活环境；Windows 也可把 `python` 换成 `.\.venv\Scripts\python.exe`。
 
-**摄像头**：保持单人正脸，均匀稳定光照，等待约 15 秒，窗口每 2 秒更新结果；按 Q / ESC 结束。界面显示三个采样区域、分数、粗略 BPM 和质量不足原因。默认不保存画面。
+**摄像头**：保持单人正脸，均匀稳定光照，等待约 15 秒；后台约每 2 秒发起分析，实际更新延迟取决于 CPU。采集与分析分开运行，避免分析阻塞采样；检测丢失时立即撤销先前结果。按 Q / ESC 结束。界面显示三个采样区域、分数、粗略 BPM 和质量不足原因。默认不保存画面。
 
 ```bash
 python -m rppg_liveness camera --index 0 --seconds 30 --output outputs/camera.json
@@ -166,6 +166,7 @@ python -m pytest -q
 | `excessive_motion` | 保持头部稳定；评估移动场景时保留这类失败记录 |
 | `unstable_or_extreme_lighting` | 避免逆光、屏幕闪光和自动曝光快速变化 |
 | `too_short` | 录制 20 秒并重新运行 |
+| `analysis_too_slow` | 摄像头后台分析超过 5 秒，减少 CPU 占用或改用离线视频模式 |
 | `no_measurable_color_variation` | 静态或量化后信号太弱，无法确定活体 |
 | 缺少 `CascadeClassifier` | 使用本项目约束的 OpenCV 4.x；不支持 OpenCV 5.x 的模块变动 |
 | GUI 无法启动 | 安装桌面版 `opencv-python`；无桌面时视频模式可直接用，摄像头用 `--no-display --seconds 30` |
