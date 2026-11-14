@@ -27,6 +27,7 @@ def test_exploratory_trial_counts_live_false_reject_and_replay_false_accept(tmp_
     assert report["all"]["confusion"] == {"TP": 0, "FP": 1, "TN": 1, "FN": 1}
     assert report["all"]["accuracy_fail_closed"] == pytest.approx(1 / 3)
     assert report["by_attack_type"]["replay"]["APCER_fail_closed"] == 1.0
+    assert report["detection"]["status"] == "measurable_on_scorable_subset"
     assert len(json.loads((out / "predictions.json").read_text())) == 3
     assert (out / "predictions.csv").exists() and (out / "evaluation.png").stat().st_size > 100
 
@@ -60,3 +61,19 @@ def test_duplicate_file_across_classes_rejected(tmp_path):
 
 def test_quick_cli_invalid_threshold(tmp_path):
     assert main(["quick-evaluate", str(tmp_path), "--threshold", "nan"]) == 2
+
+
+def test_all_inconclusive_never_reports_detection_accuracy(tmp_path, monkeypatch, capsys):
+    root = folders(tmp_path / "data")
+    monkeypatch.setattr(evaluation, "analyze_video", lambda path: {
+        "status": "insufficient_quality", "reason": "too_short", "score": None,
+        "bpm": None, "quality": {"duration": 3.0}})
+    output = tmp_path / "out"
+    assert main(["quick-evaluate", str(root), "--output", str(output)]) == 0
+    report = json.loads((output / "report.json").read_text())
+    assert report["all"]["coverage"] == 0
+    assert report["detection"]["status"] == "not_measurable"
+    assert report["detection"]["accuracy"] is None
+    assert [r["reason"] for r in report["quality_failures"]] == ["too_short"] * 3
+    output_text = capsys.readouterr().out
+    assert '"not_measurable"' in output_text and '"accuracy_fail_closed"' not in output_text

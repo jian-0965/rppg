@@ -183,12 +183,22 @@ def quick_evaluate(data_dir, output, threshold=0.55):
         row["sha256"] = hashes[index-1]
     output.mkdir(parents=True, exist_ok=True)
     write_json(output / "predictions.json", rows)
+    scorable = [r for r in rows if r["status"] == "ok" and r["score"] is not None]
+    classes = {r["label"] for r in scorable}
+    detection = ({"status": "measurable_on_scorable_subset", **metrics(scorable, threshold)}
+                 if classes == {"live", "attack"} else
+                 {"status": "not_measurable", "accuracy": None, "APCER": None,
+                  "BPCER": None, "AUC": None,
+                  "reason": "Need at least one scorable live AND attack video"})
+    failures = [{"path": r["path"], "label": r["label"], "reason": r["reason"],
+                 "quality": r.get("quality", {})} for r in rows if r["status"] != "ok"]
     report = {"kind": "exploratory_fixed_threshold", "threshold": threshold,
               "warning": "Measured only on these submitted videos. Default threshold is unvalidated; repeated subjects are correlated. Replay may preserve pulse.",
-              "counts": counts, "all": metrics(rows, threshold),
+              "counts": counts, "detection": detection, "quality_failures": failures,
+              "all": metrics(rows, threshold),
               "by_attack_type": {kind: metrics([r for r in rows if r["attack_type"] in {"none", kind}], threshold)
                                  for kind in ("print", "replay")},
-              "note": "Inconclusive is never accepted; AUC only uses scorable videos. This is not a population accuracy estimate. Use subject-disjoint evaluate for held-out claims."}
+              "note": "all.*_fail_closed describes operational reject policy; its accuracy can look high even with zero scorable samples. Use detection metrics only with both classes scorable, alongside coverage. This is not a population accuracy estimate."}
     write_json(output / "report.json", report)
     fields = ["path", "label", "attack_type", "status", "reason", "score", "bpm", "sha256"]
     with (output / "predictions.csv").open("w", encoding="utf-8-sig", newline="") as stream:

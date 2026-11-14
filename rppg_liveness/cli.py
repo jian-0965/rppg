@@ -56,7 +56,11 @@ def main(argv=None):
             if not np.isfinite(args.threshold) or not 0 <= args.threshold <= 1:
                 raise ValueError("--threshold must be finite and between 0 and 1")
             report = quick_evaluate(args.data_dir, args.output, args.threshold)
-            print(json.dumps(report["all"], ensure_ascii=False, indent=2, allow_nan=False))
+            print(json.dumps({"n": report["all"]["n"], "coverage": report["all"]["coverage"],
+                              "inconclusive": report["all"]["inconclusive"],
+                              "detection": report["detection"],
+                              "quality_failures": report["quality_failures"]},
+                             ensure_ascii=False, indent=2, allow_nan=False))
             print(f"Report: {args.output / 'report.json'}")
             return 0
         threshold = resolve_threshold(args)

@@ -82,7 +82,7 @@ mkdir data\live data\print data\replay
 python -m rppg_liveness quick-evaluate data --output outputs/quick-evaluation
 ```
 
-看 `outputs/quick-evaluation/report.json` 的 `all.accuracy_fail_closed`、`all.APCER_fail_closed`（攻击误通过）、`all.BPCER_fail_closed`（真人误拒）、`all.coverage`，以及 `by_attack_type.replay` 的攻击误通过率；`predictions.csv` 列出每段视频的结果，`evaluation.png` 显示混淆矩阵。画面质量不足的真人也算未通过；只用照片样本、只用真人样本、完全重复的视频都会被拒绝。
+首先看 `outputs/quick-evaluation/report.json` 的 `detection.status`、`all.coverage` 和 `quality_failures`。如果两类都至少有一段**可评分**的视频，`detection` 会显示可评分子集的准确率和误判率；`all.*_fail_closed` 是“无法判断时一律不放行”的操作策略结果，**覆盖率为 0 时不能当作活体检测准确率**。`by_attack_type.replay` 是同一操作策略下的回放误通过率；`predictions.csv` 列出每段视频的失败原因，`evaluation.png` 显示操作策略混淆矩阵。画面质量不足的真人也算未通过；只用照片样本、只用真人样本、完全重复的视频都会被拒绝。
 
 如报 `Provide at least one video`，程序会列出每个目录识别到的视频数量及实际看见的文件名。文件需要**直接**放在 `data\live`、`data\print`、`data\replay` 下；放在它们的下一层子文件夹或使用 `.wmv` 等不支持的扩展名不会被识别。Windows CMD 可用 `dir /b data\live`、`dir /b data\print`、`dir /b data\replay` 检查。
 
