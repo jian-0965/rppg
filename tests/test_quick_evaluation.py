@@ -31,11 +31,24 @@ def test_exploratory_trial_counts_live_false_reject_and_replay_false_accept(tmp_
     assert (out / "predictions.csv").exists() and (out / "evaluation.png").stat().st_size > 100
 
 
-def test_missing_attack_class_refuses_accuracy(tmp_path):
+def test_missing_attack_class_refuses_accuracy_with_folder_inventory(tmp_path):
     root = folders(tmp_path)
     (root / "replay" / "trial.avi").unlink()
-    with pytest.raises(ValueError, match="at least one"):
+    with pytest.raises(ValueError, match=r"replay: 0 recognized, found \(empty\)"):
         evaluation.quick_evaluate(root, tmp_path / "out")
+
+
+def test_unsupported_file_and_nested_folder_explained(tmp_path):
+    root = folders(tmp_path)
+    (root / "print" / "trial.avi").unlink()
+    (root / "print" / "trial.wmv").write_bytes(b"wmv")
+    (root / "print" / "Camera Roll").mkdir()
+    with pytest.raises(ValueError) as error:
+        evaluation.quick_evaluate(root, tmp_path / "out")
+    message = str(error.value)
+    assert "print: 0 recognized" in message
+    assert "trial.wmv" in message and "Camera Roll/" in message
+    assert str(root.resolve()) in message
 
 
 def test_duplicate_file_across_classes_rejected(tmp_path):

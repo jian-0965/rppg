@@ -152,17 +152,28 @@ def quick_evaluate(data_dir, output, threshold=0.55):
              "replay": ("attack", "replay")}
     extensions = {".avi", ".mp4", ".mov", ".mkv"}
     rows = []
+    inventory = {}
     for folder, (label, attack_type) in types.items():
         location = root / folder
         if not location.is_dir():
             raise ValueError(f"Missing folder: {location}")
-        for path in sorted(location.iterdir()):
+        entries = sorted(location.iterdir())
+        recognized = []
+        for path in entries:
             if path.is_file() and path.suffix.lower() in extensions:
                 rows.append({"path": str(path), "label": label, "attack_type": attack_type})
+                recognized.append(path.name)
+        inventory[folder] = {"recognized": recognized,
+                             "found": [p.name + ("/" if p.is_dir() else "") for p in entries]}
     counts = {folder: sum(row["attack_type"] == kind for row in rows)
               for folder, (_, kind) in types.items()}
     if any(counts[k] < 1 for k in types):
-        raise ValueError("Provide at least one video in each of live/, print/ and replay/")
+        details = "; ".join(f"{folder}: {counts[folder]} recognized, found "
+                            f"{', '.join(inventory[folder]['found']) or '(empty)'}"
+                            for folder in types)
+        raise ValueError("Provide at least one video in each of live/, print/ and replay/. "
+                         f"Checked {root}. {details}. Supported: .mp4 .avi .mov .mkv "
+                         "(files directly inside each folder).")
     hashes = [sha256(row["path"]) for row in rows]
     if len(hashes) != len(set(hashes)):
         raise ValueError("Duplicate video contents across trial folders")

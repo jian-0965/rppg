@@ -84,6 +84,8 @@ python -m rppg_liveness quick-evaluate data --output outputs/quick-evaluation
 
 看 `outputs/quick-evaluation/report.json` 的 `all.accuracy_fail_closed`、`all.APCER_fail_closed`（攻击误通过）、`all.BPCER_fail_closed`（真人误拒）、`all.coverage`，以及 `by_attack_type.replay` 的攻击误通过率；`predictions.csv` 列出每段视频的结果，`evaluation.png` 显示混淆矩阵。画面质量不足的真人也算未通过；只用照片样本、只用真人样本、完全重复的视频都会被拒绝。
 
+如报 `Provide at least one video`，程序会列出每个目录识别到的视频数量及实际看见的文件名。文件需要**直接**放在 `data\live`、`data\print`、`data\replay` 下；放在它们的下一层子文件夹或使用 `.wmv` 等不支持的扩展名不会被识别。Windows CMD 可用 `dir /b data\live`、`dir /b data\print`、`dir /b data\replay` 检查。
+
 **这个快速实验只描述你提供的这些样本；默认 0.55 阈值仍未经校准。** 同一个人多次录制的结果相关，少量样本的百分比不等于所有人的准确率。不要根据快速实验的结果反复调整阈值再报告同一批视频的准确率。需要对其他人的效果作可信报告时，继续使用下面的人员互不重叠开发／测试集流程。
 
 ### 更严格的开发／测试集实验

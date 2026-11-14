@@ -6,6 +6,7 @@
 
 - `python -m pip install -e '.[dev]'`：安装成功；发现 OpenCV 5 不提供当前所用的 `CascadeClassifier`，依赖范围已修正为 `opencv-python>=4.8,<5` 并安装验证。
 - 新增固定阈值的三类样本快速评估后，`python -m pytest -q`：**46 passed**（3.42 秒）。共享环境中的 anyio pytest 插件有一条弃用警告，不影响结果。
+- 新增缺失视频的逐目录诊断后，`python -m pytest -q tests/test_quick_evaluation.py`：**5 passed**；覆盖空目录、嵌套目录及不支持的扩展名。
 - `python -m compileall -q rppg_liveness`：通过。
 - `python -m rppg_liveness --help`：三个子命令正常显示。
 
