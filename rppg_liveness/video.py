@@ -7,6 +7,24 @@ import numpy as np
 from .core import Config, analyze, decide, rejected
 
 
+def _timed_analysis(snapshot, config):
+    start = time.perf_counter()
+    result = analyze(*snapshot, config=config)
+    result["analysis_seconds"] = time.perf_counter() - start
+    return result
+
+
+def _check_freshness(result, age):
+    if age > 5:
+        expired = rejected("analysis_too_slow", **result.get("quality", {}))
+        expired["analysis_seconds"] = result.get("analysis_seconds")
+        expired["diagnostics"] = {"expired_score": result.get("score"),
+                                  "expired_features": result.get("features", {})}
+        result = expired
+    result["analysis_age_seconds"] = age
+    return result
+
+
 class FaceSampler:
     def __init__(self):
         self.detector = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
@@ -118,17 +136,14 @@ def camera(index=0, threshold=0.55, seconds=0, display=True, config=Config()):
                 future, submitted_at, submitted_generation = pending
                 computed = future.result()
                 if submitted_generation == generation:
-                    result = computed if now - submitted_at <= 5 else rejected("analysis_too_slow")
+                    result = _check_freshness(computed, now - submitted_at)
                     result_time = submitted_at
                 pending = None
             if result_time is not None and result["status"] == "ok":
-                if now - result_time > 5:
-                    result = rejected("analysis_too_slow")
-                else:
-                    result["analysis_age_seconds"] = now - result_time
+                result = _check_freshness(result, now - result_time)
             if pending is None and now - last_analysis >= 2 and np.isfinite(color).all():
                 snapshot = tuple(zip(*samples))
-                pending = (executor.submit(analyze, *snapshot, config=config), now, generation)
+                pending = (executor.submit(_timed_analysis, snapshot, config), now, generation)
                 last_analysis = now
                 if not display:
                     print(f"{now:.1f}s {decide(result, threshold)} score={result['score']} reason={result['reason']}")

@@ -93,3 +93,24 @@ def test_camera_keeps_capturing_during_analysis(monkeypatch):
     video.camera(seconds=1, display=False)
     assert observations and all(observations)
     assert capture.count >= 10 and capture.released
+
+
+def test_slow_analysis_is_rejected_but_diagnostics_retained():
+    from rppg_liveness.video import _check_freshness
+    from rppg_liveness.core import decide
+    result = dict(status="ok", reason=None, score=0.9, bpm=72,
+                  quality={"fps": 30}, features={"roi_correlation": 0.8}, analysis_seconds=6.1)
+    expired = _check_freshness(result, 6.2)
+    assert expired["reason"] == "analysis_too_slow"
+    assert decide(expired) == "inconclusive" and expired["score"] is None
+    assert expired["quality"]["fps"] == 30
+    assert expired["analysis_seconds"] == 6.1 and expired["analysis_age_seconds"] == 6.2
+    assert expired["diagnostics"]["expired_score"] == 0.9
+
+
+def test_timed_analysis_reports_runtime(monkeypatch):
+    from rppg_liveness import video
+    monkeypatch.setattr(video, "analyze", lambda *args, **kwargs: {"status": "ok"})
+    ticks = iter([1., 1.125])
+    monkeypatch.setattr(video.time, "perf_counter", lambda: next(ticks))
+    assert video._timed_analysis(([], [], []), None)["analysis_seconds"] == 0.125

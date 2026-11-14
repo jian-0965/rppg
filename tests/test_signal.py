@@ -73,3 +73,33 @@ def test_jittered_timestamps():
     result = analyze(t, c, b)
     assert result["status"] == "ok"
     assert abs(result["bpm"] - 72) < 3
+
+
+def reference_pulse(rgb, fs, method):
+    """Original scalar implementation with independent SciPy detrending."""
+    from scipy.signal import butter, detrend, sosfiltfilt
+    def filt(x):
+        return sosfiltfilt(butter(3, [0.7, 3], fs=fs, btype="bandpass", output="sos"), detrend(x))
+    width = max(24, round(1.6 * fs))
+    out, counts = np.zeros(len(rgb)), np.zeros(len(rgb))
+    for end in range(width, len(rgb) + 1):
+        w = rgb[end-width:end]
+        r, g, b = (w / np.maximum(w.mean(axis=0), 1e-8) - 1).T
+        if method == "pos":
+            x, y = g-b, g+b-2*r
+            h = x + x.std() / max(y.std(), 1e-8) * y
+        else:
+            x, y = filt(3*r-2*g), filt(1.5*r+g-1.5*b)
+            h = x - x.std() / max(y.std(), 1e-8) * y
+        out[end-width:end] += h - h.mean()
+        counts[end-width:end] += 1
+    return filt(out / np.maximum(counts, 1))
+
+
+@pytest.mark.parametrize("method", ["pos", "chrom"])
+@pytest.mark.parametrize("fps", [15, 29.97, 60])
+def test_batched_algorithm_matches_scalar_reference(method, fps):
+    _, colors, _ = trace(bpm=87, seconds=10, fps=fps, noise=0.3)
+    rgb = colors[:, 0]
+    np.testing.assert_allclose(pulse(rgb, fps, method), reference_pulse(rgb, fps, method),
+                               rtol=1e-8, atol=1e-10)

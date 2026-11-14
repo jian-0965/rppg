@@ -1,10 +1,22 @@
 """Independent implementations of POS and CHROM color projections."""
 import numpy as np
-from scipy.signal import butter, detrend, sosfiltfilt, welch
+from functools import lru_cache
+from scipy.signal import butter, sosfiltfilt, welch
+
+
+@lru_cache(maxsize=32)
+def _filter(fs):
+    return butter(3, [0.7, 3.0], fs=fs, btype="bandpass", output="sos")
 
 
 def bandpass(x, fs):
-    return sosfiltfilt(butter(3, [0.7, 3.0], fs=fs, btype="bandpass", output="sos"), detrend(x))
+    """Linear detrend and filter along the last axis, also for batched windows."""
+    x = np.asarray(x, dtype=float)
+    axis = np.arange(x.shape[-1], dtype=float)
+    axis -= axis.mean()
+    centered = x - x.mean(axis=-1, keepdims=True)
+    slope = (centered * axis).sum(axis=-1, keepdims=True) / (axis * axis).sum()
+    return sosfiltfilt(_filter(float(fs)), centered - slope * axis, axis=-1)
 
 
 def pulse(rgb, fs, method="pos"):
@@ -17,19 +29,22 @@ def pulse(rgb, fs, method="pos"):
     width = max(24, int(round(1.6 * fs)))
     if len(rgb) < max(width, 32):
         raise ValueError("Not enough color samples")
+    # Preserve every original window and projection; batch filters instead of
+    # redesigning and executing thousands of separate filters in Python.
+    windows = np.moveaxis(np.lib.stride_tricks.sliding_window_view(rgb, width, axis=0), 1, 2)
+    normalized = windows / np.maximum(windows.mean(axis=1, keepdims=True), 1e-8) - 1
+    r, g, b = np.moveaxis(normalized, -1, 0)
+    if method == "pos":
+        x, y = g - b, g + b - 2 * r
+        h = x + x.std(axis=-1, keepdims=True) / np.maximum(y.std(axis=-1, keepdims=True), 1e-8) * y
+    else:
+        x, y = bandpass(3 * r - 2 * g, fs), bandpass(1.5 * r + g - 1.5 * b, fs)
+        h = x - x.std(axis=-1, keepdims=True) / np.maximum(y.std(axis=-1, keepdims=True), 1e-8) * y
+    h -= h.mean(axis=-1, keepdims=True)
     out, counts = np.zeros(len(rgb)), np.zeros(len(rgb))
-    for end in range(width, len(rgb) + 1):
-        window = rgb[end - width:end]
-        normalized = window / np.maximum(window.mean(axis=0), 1e-8) - 1
-        r, g, b = normalized.T
-        if method == "pos":
-            x, y = g - b, g + b - 2 * r
-            h = x + x.std() / max(y.std(), 1e-8) * y
-        else:
-            x, y = bandpass(3 * r - 2 * g, fs), bandpass(1.5 * r + g - 1.5 * b, fs)
-            h = x - x.std() / max(y.std(), 1e-8) * y
-        out[end - width:end] += h - h.mean()
-        counts[end - width:end] += 1
+    for offset in range(width):
+        out[offset:offset + len(h)] += h[:, offset]
+        counts[offset:offset + len(h)] += 1
     return bandpass(out / np.maximum(counts, 1), fs)
 
 

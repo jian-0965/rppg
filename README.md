@@ -57,6 +57,7 @@ python -m rppg_liveness video data/live01.mp4 --output outputs/live01.json
 | `score` | 0–1 的启发式证据分数，**不是概率** |
 | `bpm` | 42–180 BPM 搜索范围内的估计，仅用于算法观察 |
 | `quality` / `reason` | 有效帧比例、帧率、运动、亮度及拒绝原因 |
+| `analysis_seconds` / `analysis_age_seconds` | 摄像头窗口的计算耗时／结果对应样本距当前的时间（秒） |
 
 默认阈值 **0.55 未经验证**，仅用于启动演示。完成评估后使用自己开发集的阈值：
 
@@ -166,12 +167,23 @@ python -m pytest -q
 | `excessive_motion` | 保持头部稳定；评估移动场景时保留这类失败记录 |
 | `unstable_or_extreme_lighting` | 避免逆光、屏幕闪光和自动曝光快速变化 |
 | `too_short` | 录制 20 秒并重新运行 |
-| `analysis_too_slow` | 摄像头后台分析超过 5 秒，减少 CPU 占用或改用离线视频模式 |
+| `analysis_too_slow` | 结果对应样本已超过 5 秒有效期；先拉取批量滤波优化版本，再检查计算耗时和 CPU 占用，必要时改用离线视频 |
 | `no_measurable_color_variation` | 静态或量化后信号太弱，无法确定活体 |
 | 缺少 `CascadeClassifier` | 使用本项目约束的 OpenCV 4.x；不支持 OpenCV 5.x 的模块变动 |
 | GUI 无法启动 | 安装桌面版 `opencv-python`；无桌面时视频模式可直接用，摄像头用 `--no-display --seconds 30` |
 
 测试版本与验证范围见 [VALIDATION.md](VALIDATION.md)。本项目不会发送人脸到服务端；JSON/CSV 和原始视频请按自身授权管理。`data/`、`outputs/`、常见视频扩展名已加入 `.gitignore`，避免误把人脸视频提交到公开仓库。
+
+### 已安装用户更新性能修复
+
+关闭摄像头窗口，在仓库目录运行：
+
+```bash
+git pull --ff-only
+python -m rppg_liveness camera --seconds 30 --output outputs/camera.json
+```
+
+性能修复将所有滑动窗口批量滤波并缓存滤波器系数，保持原有评分、阈值和 5 秒过期规则。若仍超时，结果保持 `inconclusive`，同时保留 `quality`、分析耗时和 `diagnostics` 中的过期特征供排查；过期分数不能用于放行。
 
 ## 5. 参考资料
 
